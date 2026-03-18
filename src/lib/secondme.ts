@@ -5,6 +5,7 @@ const SECONDME_CLIENT_SECRET = process.env.SECONDME_CLIENT_SECRET!
 const SECONDME_REDIRECT_URI = process.env.SECONDME_REDIRECT_URI!
 const SECONDME_OAUTH_AUTHORIZE_URL = process.env.SECONDME_OAUTH_AUTHORIZE_URL!
 const SECONDME_OAUTH_TOKEN_URL = process.env.SECONDME_OAUTH_TOKEN_URL!
+const SECONDME_OAUTH_REFRESH_URL = process.env.SECONDME_OAUTH_REFRESH_URL!
 const SECONDME_USERINFO_URL = process.env.SECONDME_USERINFO_URL!
 const SECONDME_CHAT_URL = process.env.SECONDME_CHAT_URL!
 const SECONDME_NOTE_URL = process.env.SECONDME_NOTE_URL!
@@ -15,12 +16,13 @@ export function generateState(): string {
 }
 
 // 获取 SecondMe OAuth 授权 URL
+// 注意：OAUTH_AUTHORIZE_URL 已包含完整路径，直接拼接 ? 和参数
 export function getSecondMeAuthUrl(): string {
   const params = new URLSearchParams({
     client_id: SECONDME_CLIENT_ID,
     redirect_uri: SECONDME_REDIRECT_URI,
     response_type: 'code',
-    scope: 'openid profile chat note',
+    scope: 'user.info user.info.shades note.add chat',
     state: generateState(),
   })
 
@@ -28,6 +30,7 @@ export function getSecondMeAuthUrl(): string {
 }
 
 // 使用授权码交换 Token
+// 响应格式: { code: 0, data: { accessToken, refreshToken, expiresIn, ... } }
 export async function exchangeCodeForToken(code: string) {
   const response = await fetch(SECONDME_OAUTH_TOKEN_URL, {
     method: 'POST',
@@ -43,15 +46,49 @@ export async function exchangeCodeForToken(code: string) {
     }),
   })
 
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to exchange code for token: ${error}`)
+  const result = await response.json()
+
+  if (result.code !== 0 || !result.data) {
+    throw new Error(`Failed to exchange code for token: ${result.message || JSON.stringify(result)}`)
   }
 
-  return response.json()
+  return {
+    access_token: result.data.accessToken,
+    refresh_token: result.data.refreshToken,
+    expires_in: result.data.expiresIn,
+  }
+}
+
+// 刷新 Token
+export async function refreshAccessToken(refreshToken: string) {
+  const response = await fetch(SECONDME_OAUTH_REFRESH_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: SECONDME_CLIENT_ID,
+      client_secret: SECONDME_CLIENT_SECRET,
+    }),
+  })
+
+  const result = await response.json()
+
+  if (result.code !== 0 || !result.data) {
+    throw new Error(`Failed to refresh token: ${result.message || JSON.stringify(result)}`)
+  }
+
+  return {
+    access_token: result.data.accessToken,
+    refresh_token: result.data.refreshToken,
+    expires_in: result.data.expiresIn,
+  }
 }
 
 // 获取用户信息
+// 响应格式: { code: 0, data: { email, name, avatarUrl, route, ... } }
 export async function getUserInfo(accessToken: string) {
   const response = await fetch(SECONDME_USERINFO_URL, {
     headers: {
@@ -59,12 +96,21 @@ export async function getUserInfo(accessToken: string) {
     },
   })
 
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to get user info: ${error}`)
+  const result = await response.json()
+
+  if (result.code !== 0 || !result.data) {
+    throw new Error(`Failed to get user info: ${result.message || JSON.stringify(result)}`)
   }
 
-  return response.json()
+  // 映射到统一格式
+  return {
+    sub: result.data.route || result.data.id,
+    name: result.data.name,
+    email: result.data.email,
+    picture: result.data.avatarUrl,
+    bio: result.data.bio,
+    shades: result.data.shades,
+  }
 }
 
 // A2A Chat API
@@ -95,27 +141,6 @@ export async function sendChatMessage(
   return response.json()
 }
 
-// Key Memory - 读取
-export async function getNotes(accessToken: string, category?: string) {
-  const url = new URL(SECONDME_NOTE_URL)
-  if (category) {
-    url.searchParams.set('category', category)
-  }
-
-  const response = await fetch(url.toString(), {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-    },
-  })
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to get notes: ${error}`)
-  }
-
-  return response.json()
-}
-
 // Key Memory - 写入
 export async function createNote(
   accessToken: string,
@@ -136,10 +161,11 @@ export async function createNote(
     }),
   })
 
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to create note: ${error}`)
+  const result = await response.json()
+
+  if (result.code !== 0) {
+    throw new Error(`Failed to create note: ${result.message || JSON.stringify(result)}`)
   }
 
-  return response.json()
+  return result.data
 }
