@@ -1,0 +1,153 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+// 用户表 - 存储SecondMe登录信息
+model User {
+  id            String   @id @default(cuid())
+  secondMeId    String   @unique // SecondMe用户ID
+  email         String?
+  name          String?
+  avatar        String?
+  bio           String?
+  shades        String?  // JSON格式的兴趣标签
+  accessToken   String
+  refreshToken  String?
+  tokenExpiresAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // 关联
+  stories       StoryParticipant[]
+  memories      Memory[]
+
+  @@map("users")
+}
+
+// 剧本表
+model Story {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  content     String   // JSON格式的剧本内容
+  coverImage  String?
+  genre       String   // 类型：悬疑、言情、科幻等
+  difficulty  Int      @default(1) // 难度等级
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 关联
+  participants StoryParticipant[]
+  chats        ChatMessage[]
+
+  @@map("stories")
+}
+
+// 故事参与记录
+model StoryParticipant {
+  id         String   @id @default(cuid())
+  userId     String
+  storyId    String
+  role       String   // 玩家角色
+  progress   Int      @default(0) // 故事进度
+  choices    String?  // JSON格式的故事选择
+  metadata   String?  // JSON格式的额外信息（角色分配等）
+  status     String   @default("active") // active, completed, abandoned
+  startedAt  DateTime @default(now())
+  completedAt DateTime?
+
+  user       User     @relation(fields: [userId], references: [id])
+  story      Story    @relation(fields: [storyId], references: [id])
+
+  @@unique([userId, storyId])
+  @@map("story_participants")
+}
+
+// 聊天消息表 - A2A对话
+model ChatMessage {
+  id        String   @id @default(cuid())
+  storyId   String
+  senderId  String   // 用户ID或AI角色标识
+  senderType String  // "user" 或 "agent"
+  content   String
+  metadata  String?  // JSON格式的额外信息
+  createdAt DateTime @default(now())
+
+  story     Story    @relation(fields: [storyId], references: [id])
+
+  @@map("chat_messages")
+}
+
+// Key Memory表
+model Memory {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String
+  value     String
+  category  String?  // 分类：preference, experience, trait等
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, key])
+  @@map("memories")
+}
+
+// 故事分享记录
+model StoryShare {
+  id        String   @id @default(cuid())
+  storyId   String
+  userId    String
+  platform  String   // zhihu, wechat, weibo, link
+  url       String?
+  code      String   @unique // 分享码
+  clicks    Int      @default(0)
+  joins     Int      @default(0)
+  metadata  String?  // JSON格式的额外信息
+  createdAt DateTime @default(now())
+
+  @@map("story_shares")
+}
+
+// 故事邀请记录
+model StoryInvitation {
+  id         String    @id @default(cuid())
+  storyId    String
+  inviterId  String
+  inviteeId  String?
+  code       String    @unique
+  status     String    @default("pending") // pending, accepted, expired
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  acceptedAt DateTime?
+  reward     String?
+
+  @@map("story_invitations")
+}
+
+// 成就记录
+model Achievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String   // 成就ID
+  name          String
+  description   String
+  icon          String
+  rarity        String   // common, rare, epic, legendary
+  metadata      String?  // JSON格式的额外信息
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, achievementId])
+  @@map("achievements")
+}
