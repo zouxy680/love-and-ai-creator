@@ -141,6 +141,28 @@ export async function sendChatMessage(
   return response.json()
 }
 
+// Key Memory - 读取（获取用户软记忆）
+// 响应格式: { code: 0, data: { list: [...] } }
+export async function getNotes(accessToken: string, category?: string) {
+  const SECONDME_API_BASE_URL = process.env.SECONDME_API_BASE_URL || 'https://api.mindverse.com/gate/lab'
+  const url = `${SECONDME_API_BASE_URL}/api/secondme/user/softmemory${category ? `?category=${category}` : ''}`
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (result.code !== 0) {
+    throw new Error(`Failed to get notes: ${result.message || JSON.stringify(result)}`)
+  }
+
+  // 返回 list 数组
+  return result.data?.list || []
+}
+
 // Key Memory - 写入
 export async function createNote(
   accessToken: string,
