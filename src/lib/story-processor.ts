@@ -305,8 +305,8 @@ function generateDecisionPoints(scenes: Scene[]): DecisionPoint[] {
 }
 
 /**
- * 使用 AI（Claude）进行剧本结构化
- * 这是一个可选的高级版本，需要配置 ANTHROPIC_API_KEY
+ * 使用 AI（GLM/智谱）进行剧本结构化
+ * 这是一个可选的高级版本，需要配置 GLM_API_KEY
  */
 export async function structureStoryWithAI(
   article: {
@@ -316,24 +316,24 @@ export async function structureStoryWithAI(
   },
   genre: string = '悬疑'
 ): Promise<StructuredStory> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.GLM_API_KEY
 
   if (!apiKey) {
     // 如果没有 API Key，使用简化版
-    console.log('[StoryProcessor] No ANTHROPIC_API_KEY, using simplified processing')
+    console.log('[StoryProcessor] No GLM_API_KEY, using simplified processing')
     return structureStoryFromArticle(article, genre)
   }
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // 使用 GLM API（智谱 AI）
+    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'glm-5',
         max_tokens: 2048,
         messages: [
           {
@@ -344,7 +344,7 @@ export async function structureStoryWithAI(
 文章摘要：${article.excerpt}
 ${article.content ? `文章内容：${article.content.substring(0, 2000)}` : ''}
 
-请输出以下 JSON 格式（不要添加任何其他文字）：
+请输出以下 JSON 格式（不要添加任何其他文字，不要用 markdown 代码块包裹）：
 {
   "characters": [
     {"id": "char-1", "name": "角色名", "role": "protagonist/antagonist/supporting", "description": "描述", "personality": "性格", "motivation": "动机"}
@@ -362,14 +362,23 @@ ${article.content ? `文章内容：${article.content.substring(0, 2000)}` : ''}
     })
 
     if (!response.ok) {
-      throw new Error(`AI API error: ${response.status}`)
+      const errorText = await response.text()
+      console.error('[StoryProcessor] GLM API error:', response.status, errorText)
+      throw new Error(`GLM API error: ${response.status}`)
     }
 
     const data = await response.json()
-    const content = data.content[0]?.text || ''
+    const content = data.choices?.[0]?.message?.content || ''
+
+    // 提取 JSON（可能被 markdown 代码块包裹）
+    let jsonStr = content
+    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/)
+    if (jsonMatch) {
+      jsonStr = jsonMatch[1].trim()
+    }
 
     // 解析 AI 返回的 JSON
-    const parsed = JSON.parse(content)
+    const parsed = JSON.parse(jsonStr)
 
     return {
       title: article.title,
