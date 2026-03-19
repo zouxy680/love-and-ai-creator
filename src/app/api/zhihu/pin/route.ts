@@ -36,17 +36,12 @@ export async function POST(request: NextRequest) {
 
     // 如果需要保存到 Key Memory
     if (saveToMemory) {
-      try {
-        await createNote(
-          user.accessToken,
-          `zhihu_pin_${result.id}`,
-          content,
-          'social'
-        )
-      } catch (memoryError) {
-        console.error('Error saving to memory:', memoryError)
-        // 不影响主流程
-      }
+      await createNote(
+        user.accessToken,
+        `zhihu_pin_${result.id}`,
+        content,
+        'social'
+      )
     }
 
     return NextResponse.json({
@@ -56,8 +51,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Error publishing pin:', error)
+    const errorMessage = error instanceof Error ? error.message : '发布失败，请重试'
     return NextResponse.json(
-      { error: 'Failed to publish pin' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

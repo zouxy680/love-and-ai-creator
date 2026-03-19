@@ -43,6 +43,12 @@ export default function MemoriesClient({
         }),
       })
 
+      const data = await response.json()
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || '添加记忆失败')
+      }
+
       if (response.ok) {
         const category = newMemory.category || '其他'
         setGroupedMemories((prev) => ({
@@ -63,6 +69,7 @@ export default function MemoriesClient({
       }
     } catch (error) {
       console.error('Error adding memory:', error)
+      alert(error instanceof Error ? error.message : '添加记忆失败，请重试')
     }
   }
 
@@ -78,6 +85,12 @@ export default function MemoriesClient({
         }),
       })
 
+      const data = await response.json()
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || '编辑记忆失败')
+      }
+
       if (response.ok) {
         const category = memory.category || '其他'
         setGroupedMemories((prev) => ({
@@ -90,6 +103,7 @@ export default function MemoriesClient({
       }
     } catch (error) {
       console.error('Error editing memory:', error)
+      alert(error instanceof Error ? error.message : '编辑记忆失败，请重试')
     }
   }
 
@@ -98,6 +112,12 @@ export default function MemoriesClient({
       const response = await fetch(`/api/memories/${memory.id}`, {
         method: 'DELETE',
       })
+
+      const data = await response.json()
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || '删除记忆失败')
+      }
 
       if (response.ok) {
         const category = memory.category || '其他'
@@ -108,6 +128,7 @@ export default function MemoriesClient({
       }
     } catch (error) {
       console.error('Error deleting memory:', error)
+      alert(error instanceof Error ? error.message : '删除记忆失败，请重试')
     }
   }
 

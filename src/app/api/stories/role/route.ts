@@ -40,8 +40,9 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[RoleAPI] Error:', error)
+    const errorMessage = error instanceof Error ? error.message : '获取角色分配失败'
     return NextResponse.json(
-      { error: 'Failed to get role assignment' },
+      { error: errorMessage },
       { status: 500 }
     )
   }
@@ -96,8 +97,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('[RoleAPI] Error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create role assignments'
     return NextResponse.json(
-      { error: 'Failed to create role assignments' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

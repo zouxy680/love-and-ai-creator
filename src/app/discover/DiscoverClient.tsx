@@ -41,9 +41,15 @@ export default function DiscoverClient() {
     try {
       const response = await fetch('/api/zhihu/hot')
       const data = await response.json()
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || '获取热榜失败')
+      }
+
       setHotList(data.hotList || [])
     } catch (error) {
       console.error('Error fetching hot list:', error)
+      alert(error instanceof Error ? error.message : '获取热榜失败，请重试')
     } finally {
       setIsLoading(false)
     }
@@ -56,9 +62,15 @@ export default function DiscoverClient() {
     try {
       const response = await fetch(`/api/zhihu/search?q=${encodeURIComponent(searchQuery)}`)
       const data = await response.json()
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || '搜索失败')
+      }
+
       setSearchResults(data.results || [])
     } catch (error) {
       console.error('Error searching:', error)
+      alert(error instanceof Error ? error.message : '搜索失败，请重试')
     } finally {
       setIsSearching(false)
     }
@@ -83,15 +95,17 @@ export default function DiscoverClient() {
 
       const data = await response.json()
 
+      if (!response.ok || data.error) {
+        throw new Error(data.error || data.detail || '生成失败')
+      }
+
       if (data.success) {
         // 跳转到故事页面
         window.location.href = `/story/${data.story.id}`
-      } else {
-        alert(data.error || '生成失败')
       }
     } catch (error) {
       console.error('Error generating story:', error)
-      alert('生成失败，请重试')
+      alert(error instanceof Error ? error.message : '生成失败，请重试')
     } finally {
       setIsGenerating(false)
     }

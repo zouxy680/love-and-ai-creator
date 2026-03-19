@@ -52,8 +52,9 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('[InviteAPI] Error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to process invitation'
     return NextResponse.json(
-      { error: 'Failed to process invitation' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

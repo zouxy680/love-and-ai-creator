@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
         }
       } else {
         return NextResponse.json(
-          { error: 'No content found for the given keyword' },
+          { error: '未找到相关内容，请尝试其他关键词' },
           { status: 404 }
         )
       }
@@ -61,13 +61,13 @@ export async function POST(request: NextRequest) {
         }
       } else {
         return NextResponse.json(
-          { error: 'No content found for the given genre' },
+          { error: `未找到${genre}类型的相关内容` },
           { status: 404 }
         )
       }
     } else {
       return NextResponse.json(
-        { error: 'Either genre, keyword, or source information is required' },
+        { error: '请提供类型、关键词或来源信息' },
         { status: 400 }
       )
     }
@@ -153,8 +153,9 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     console.error('[StoryGenerate] Error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to generate story'
     return NextResponse.json(
-      { error: 'Failed to generate story' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

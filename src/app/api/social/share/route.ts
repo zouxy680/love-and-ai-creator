@@ -36,8 +36,9 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('[ShareAPI] Error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to generate share link'
     return NextResponse.json(
-      { error: 'Failed to generate share link' },
+      { error: errorMessage },
       { status: 500 }
     )
   }
@@ -67,8 +68,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(stats)
   } catch (error) {
     console.error('[ShareAPI] Error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get stats'
     return NextResponse.json(
-      { error: 'Failed to get stats' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

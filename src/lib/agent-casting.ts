@@ -1,7 +1,7 @@
 // Agent Casting 系统 - 基于 SecondMe 人格匹配故事角色
 
 import { prisma } from './prisma'
-import { getNotes } from './secondme'
+import { getNotes, getUserShades } from './secondme'
 import type { Character } from './story-processor'
 
 /**
@@ -33,6 +33,7 @@ export interface StoryRoleAssignment {
 
 /**
  * 获取用户的 SecondMe 人格信息
+ * 必须从 API 获取 Shades，失败则报错
  */
 export async function getUserPersonality(userId: string): Promise<SecondMePersonality> {
   // 从数据库获取用户信息
@@ -44,31 +45,57 @@ export async function getUserPersonality(userId: string): Promise<SecondMePerson
     throw new Error('User not found')
   }
 
-  // 解析 Shades
+  if (!user.accessToken) {
+    throw new Error('用户未登录或登录已过期，请重新登录')
+  }
+
+  // 从 API 获取最新的 Shades - 必须成功
   let shades: string[] = []
-  if (user.shades) {
+  try {
+    const freshShades = await getUserShades(user.accessToken)
+    if (freshShades.length > 0) {
+      shades = freshShades
+      // 更新数据库缓存
+      await prisma.user.update({
+        where: { id: userId },
+        data: { shades: JSON.stringify(freshShades) },
+      })
+      console.log('[AgentCasting] Got shades from API:', freshShades.length, 'items')
+    }
+  } catch (error) {
+    console.error('[AgentCasting] Failed to fetch shades:', error)
+    throw new Error('获取人格特质失败，请重试')
+  }
+
+  // 如果 API 返回空，尝试使用数据库缓存
+  if (shades.length === 0 && user.shades) {
     try {
-      shades = JSON.parse(user.shades)
+      const cachedShades = JSON.parse(user.shades)
+      if (cachedShades.length > 0) {
+        shades = cachedShades
+        console.log('[AgentCasting] Using cached shades:', shades.length, 'items')
+      }
     } catch {
-      shades = []
+      // 忽略解析错误
     }
   }
 
-  // 获取软记忆（如果有 access token）
+  if (shades.length === 0) {
+    throw new Error('无法获取您的人格特质，请确保 SecondMe 账号已完善个人资料')
+  }
+
+  // 获取软记忆
   let softMemories: string[] = []
-  if (user.accessToken) {
-    try {
-      const notesResponse = await getNotes(user.accessToken)
-      // SecondMe 返回的格式可能是 { notes: [...] } 或直接是数组
-      const notes = Array.isArray(notesResponse) ? notesResponse : (notesResponse as { notes?: unknown[] }).notes || []
-      softMemories = notes.map((note: unknown) => {
-        const n = note as { key?: string; value?: string }
-        return n.value || n.key || String(note)
-      }).filter(Boolean)
-    } catch (error) {
-      console.error('[AgentCasting] Failed to get soft memories:', error)
-      // 软记忆获取失败不影响主流程
-    }
+  try {
+    const notesResponse = await getNotes(user.accessToken)
+    const notes = Array.isArray(notesResponse) ? notesResponse : (notesResponse as { notes?: unknown[] }).notes || []
+    softMemories = notes.map((note: unknown) => {
+      const n = note as { key?: string; value?: string }
+      return n.value || n.key || String(note)
+    }).filter(Boolean)
+  } catch (error) {
+    console.error('[AgentCasting] Failed to get soft memories:', error)
+    // 软记忆获取失败不影响主流程，继续执行
   }
 
   return {

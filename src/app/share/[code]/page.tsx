@@ -27,11 +27,15 @@ export default async function SharePage({ params }: SharePageProps) {
     notFound()
   }
 
-  // 记录点击
-  await prisma.storyShare.update({
-    where: { id: share.id },
-    data: { clicks: { increment: 1 } },
-  })
+  // 记录点击（忽略错误，不影响页面显示）
+  try {
+    await prisma.storyShare.update({
+      where: { id: share.id },
+      data: { clicks: { increment: 1 } },
+    })
+  } catch (error) {
+    console.error('[Share] Failed to update click count:', error)
+  }
 
   const metadata = share.metadata ? JSON.parse(share.metadata as string) : {}
 

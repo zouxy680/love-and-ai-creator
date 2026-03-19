@@ -7,8 +7,9 @@ export async function GET() {
     return NextResponse.json({ hotList })
   } catch (error) {
     console.error('Error fetching hot list:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch hot list'
     return NextResponse.json(
-      { error: 'Failed to fetch hot list' },
+      { error: errorMessage },
       { status: 500 }
     )
   }

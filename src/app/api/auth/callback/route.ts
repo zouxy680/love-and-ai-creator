@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { exchangeCodeForToken, getUserInfo } from '@/lib/secondme'
+import { exchangeCodeForToken, getUserInfo, getUserShades } from '@/lib/secondme'
 import { prisma } from '@/lib/prisma'
 
 export async function GET(request: NextRequest) {
@@ -50,7 +50,32 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { sub: secondMeId, name, email, picture, bio, shades } = userInfo
+    const { sub: secondMeId, name, email, picture, bio } = userInfo
+
+    // 获取 Shades（人格特质）- 必须成功
+    let shades: string[] = userInfo.shades || []
+    console.log('[OAuth] Getting user shades...')
+    try {
+      const freshShades = await getUserShades(access_token)
+      if (freshShades.length > 0) {
+        shades = freshShades
+        console.log('[OAuth] Shades retrieved:', shades.length, 'items')
+      } else if (shades.length === 0) {
+        // 如果 API 返回空且 user info 也没有 shades，报错
+        return NextResponse.redirect(
+          new URL('/login?error=no_shades&details=无法获取您的人格特质，请确保 SecondMe 账号已完善个人资料', request.url)
+        )
+      }
+    } catch (shadeError) {
+      console.error('[OAuth] Failed to get shades:', shadeError)
+      if (shades.length === 0) {
+        return NextResponse.redirect(
+          new URL(`/login?error=shades_failed&details=${encodeURIComponent(String(shadeError))}`, request.url)
+        )
+      }
+      // 如果 user info 有 shades，可以继续
+      console.log('[OAuth] Using shades from user info as fallback')
+    }
 
     // 计算过期时间
     const tokenExpiresAt = new Date(Date.now() + (expires_in || 3600) * 1000)
@@ -67,7 +92,7 @@ export async function GET(request: NextRequest) {
           name: name || null,
           avatar: picture || null,
           bio: bio || null,
-          shades: shades ? JSON.stringify(shades) : null,
+          shades: shades.length > 0 ? JSON.stringify(shades) : null,
           accessToken: access_token,
           refreshToken: refresh_token || null,
           tokenExpiresAt,
@@ -77,7 +102,7 @@ export async function GET(request: NextRequest) {
           name: name || null,
           avatar: picture || null,
           bio: bio || null,
-          shades: shades ? JSON.stringify(shades) : null,
+          shades: shades.length > 0 ? JSON.stringify(shades) : null,
           accessToken: access_token,
           refreshToken: refresh_token || null,
           tokenExpiresAt,

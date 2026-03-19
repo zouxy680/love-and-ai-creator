@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
-import { BookOpen, User, LogOut, Sparkles, Compass } from 'lucide-react'
+import { BookOpen, User, LogOut, Sparkles, Compass, Trophy } from 'lucide-react'
 
 export default async function DashboardPage() {
   const cookieStore = await cookies()
@@ -98,6 +98,11 @@ export default async function DashboardPage() {
                   ))}
                 </div>
               )}
+              {shades.length > 0 && (
+                <p className="text-xs text-slate-400 mt-2">
+                  以上特质来自你的 SecondMe 分身，将用于匹配最适合你的故事角色
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -117,10 +122,10 @@ export default async function DashboardPage() {
             href="/stories"
           />
           <QuickActionCard
-            icon={<Sparkles className="w-6 h-6" />}
-            title="人格测试"
-            description="完善你的AI分身人格"
-            href="/personality-test"
+            icon={<Trophy className="w-6 h-6" />}
+            title="我的成就"
+            description="查看你在故事中的成就"
+            href="/achievements"
           />
           <QuickActionCard
             icon={<User className="w-6 h-6" />}

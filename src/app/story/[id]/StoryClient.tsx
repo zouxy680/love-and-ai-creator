@@ -145,9 +145,17 @@ export default function StoryClient({
         }),
       })
 
-      if (!response.ok) throw new Error('Failed to send message')
-
       const data = await response.json()
+
+      if (!response.ok || data.error) {
+        // 处理需要重新登录的情况
+        if (data.needRelogin) {
+          alert('登录已过期，请重新登录')
+          window.location.href = '/login'
+          return
+        }
+        throw new Error(data.error || '发送消息失败')
+      }
 
       const agentMessage: Message = {
         id: data.messageId || `agent-${Date.now()}`,
@@ -160,6 +168,7 @@ export default function StoryClient({
       setMessages((prev) => [...prev, agentMessage])
     } catch (error) {
       console.error('Error sending message:', error)
+      alert(error instanceof Error ? error.message : '发送消息失败，请重试')
     } finally {
       setIsLoading(false)
     }
@@ -193,11 +202,16 @@ export default function StoryClient({
 
       const data = await response.json()
 
+      if (!response.ok || data.error) {
+        throw new Error(data.error || '生成分享链接失败')
+      }
+
       if (data.success) {
         setShareLink(data.url || '')
       }
     } catch (error) {
       console.error('Share error:', error)
+      alert(error instanceof Error ? error.message : '生成分享链接失败，请重试')
     }
   }
 
@@ -215,19 +229,43 @@ export default function StoryClient({
 
       const data = await response.json()
 
+      if (!response.ok || data.error) {
+        throw new Error(data.error || '生成邀请链接失败')
+      }
+
       if (data.success) {
         setInviteCode(data.invitation.link)
       }
     } catch (error) {
       console.error('Invite error:', error)
+      alert(error instanceof Error ? error.message : '生成邀请链接失败，请重试')
     }
   }
 
   // 复制到剪贴板
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      console.error('Failed to copy:', error)
+      // 降级方案：使用 execCommand
+      const textArea = document.createElement('textarea')
+      textArea.value = text
+      textArea.style.position = 'fixed'
+      textArea.style.left = '-999999px'
+      document.body.appendChild(textArea)
+      textArea.select()
+      try {
+        document.execCommand('copy')
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } catch {
+        alert('复制失败，请手动复制')
+      }
+      document.body.removeChild(textArea)
+    }
   }
 
   return (

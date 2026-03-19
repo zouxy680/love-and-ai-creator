@@ -172,13 +172,13 @@ export async function sendChatMessage(
 
   if (!response.ok) {
     const error = await response.text()
-    throw new Error(`Failed to send chat message: ${error}`)
+    throw new Error(`AI 分身响应失败: ${error}`)
   }
 
   // 处理 SSE 流式响应
   const reader = response.body?.getReader()
   if (!reader) {
-    throw new Error('No response body')
+    throw new Error('AI 分身未返回响应')
   }
 
   const decoder = new TextDecoder()
@@ -197,6 +197,9 @@ export async function sendChatMessage(
         // 解析 SSE 格式
         if (line.startsWith('event: session')) {
           // 下一行包含 session ID
+        } else if (line.startsWith('event: error')) {
+          // 错误事件
+          console.error('[SecondMe] SSE error event received')
         } else if (line.startsWith('data: ')) {
           const data = line.slice(6)
           if (data === '[DONE]') {
@@ -204,6 +207,12 @@ export async function sendChatMessage(
           }
           try {
             const parsed = JSON.parse(data)
+
+            // 检查是否是错误响应
+            if (parsed.code !== undefined && parsed.code !== 0) {
+              throw new Error(parsed.message || 'AI 分身返回错误')
+            }
+
             // 提取 delta content
             const delta = parsed.choices?.[0]?.delta?.content
             if (delta) {
@@ -213,7 +222,11 @@ export async function sendChatMessage(
             if (parsed.sessionId) {
               sessionId = parsed.sessionId
             }
-          } catch {
+          } catch (parseError) {
+            // 如果是已知错误，重新抛出
+            if (parseError instanceof Error && parseError.message !== 'Unexpected token') {
+              throw parseError
+            }
             // 如果不是 JSON，直接追加内容（兼容不同格式）
             if (data && !data.includes('[DONE]')) {
               accumulatedContent += data
@@ -223,17 +236,29 @@ export async function sendChatMessage(
           // 直接的 JSON 响应（非 SSE 格式）
           try {
             const parsed = JSON.parse(line)
+            // 检查是否是错误响应
+            if (parsed.code !== undefined && parsed.code !== 0) {
+              throw new Error(parsed.message || 'AI 分身返回错误')
+            }
             if (parsed.response) {
               return { response: parsed.response, sessionId: parsed.sessionId }
             }
-          } catch {
-            // ignore parse errors
+          } catch (parseError) {
+            // 如果是已知错误，重新抛出
+            if (parseError instanceof Error && !parseError.message.startsWith('Unexpected token')) {
+              throw parseError
+            }
           }
         }
       }
     }
   } finally {
-    reader.release()
+    reader.releaseLock()
+  }
+
+  // 检查是否有内容返回
+  if (!accumulatedContent) {
+    throw new Error('AI 分身未返回任何内容，请重试')
   }
 
   return { response: accumulatedContent, sessionId }
@@ -259,6 +284,33 @@ export async function getNotes(accessToken: string, category?: string) {
 
   // 返回 list 数组
   return result.data?.list || []
+}
+
+// 获取用户 Shades（人格特质）
+// 勃应格式: { code: 0, data: { shades: [...] } }
+export async function getUserShades(accessToken: string): Promise<string[]> {
+  const SECONDME_API_BASE_URL = process.env.SECONDME_API_BASE_URL || 'https://api.mindverse.com/gate/lab'
+  const url = `${SECONDME_API_BASE_URL}/api/secondme/user/shades`
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+    },
+  })
+
+  const result = await response.json()
+
+  if (result.code !== 0) {
+    throw new Error(`Failed to get shades: ${result.message || JSON.stringify(result)}`)
+  }
+
+  const shades = result.data?.shades
+
+  if (!shades || shades.length === 0) {
+    throw new Error('No shades found in user profile')
+  }
+
+  return shades
 }
 
 // Key Memory - 写入

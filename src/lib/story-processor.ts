@@ -62,9 +62,6 @@ export async function structureStoryFromArticle(
 ): Promise<StructuredStory> {
   const fullContent = article.content || article.excerpt
 
-  // 在 MVP 阶段，我们使用简单的规则提取
-  // 生产环境应该调用 AI API（如 Claude）进行结构化
-
   // 提取角色（简化版：从文本中识别）
   const characters = extractCharacters(fullContent, genre)
 
@@ -306,7 +303,7 @@ function generateDecisionPoints(scenes: Scene[]): DecisionPoint[] {
 
 /**
  * 使用 AI（GLM/智谱）进行剧本结构化
- * 这是一个可选的高级版本，需要配置 GLM_API_KEY
+ * 需要配置 GLM_API_KEY，否则抛出错误
  */
 export async function structureStoryWithAI(
   article: {
@@ -319,26 +316,23 @@ export async function structureStoryWithAI(
   const apiKey = process.env.GLM_API_KEY
 
   if (!apiKey) {
-    // 如果没有 API Key，使用简化版
-    console.log('[StoryProcessor] No GLM_API_KEY, using simplified processing')
-    return structureStoryFromArticle(article, genre)
+    throw new Error('GLM_API_KEY 未配置，无法进行 AI 剧本结构化')
   }
 
-  try {
-    // 使用 GLM API（智谱 AI）
-    const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'glm-5',
-        max_tokens: 2048,
-        messages: [
-          {
-            role: 'user',
-            content: `请将以下知乎文章内容结构化为一个${genre}类型的互动小说剧本。
+  // 使用 GLM API（智谱 AI）
+  const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'glm-5',
+      max_tokens: 2048,
+      messages: [
+        {
+          role: 'user',
+          content: `请将以下知乎文章内容结构化为一个${genre}类型的互动小说剧本。
 
 文章标题：${article.title}
 文章摘要：${article.excerpt}
@@ -356,40 +350,54 @@ ${article.content ? `文章内容：${article.content.substring(0, 2000)}` : ''}
     {"sceneId": "scene-1", "type": "major/minor", "description": "决策描述", "impact": "影响"}
   ]
 }`,
-          },
-        ],
-      }),
-    })
+        },
+      ],
+    }),
+  })
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('[StoryProcessor] GLM API error:', response.status, errorText)
-      throw new Error(`GLM API error: ${response.status}`)
-    }
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error('[StoryProcessor] GLM API error:', response.status, errorText)
+    throw new Error(`GLM API 调用失败: ${response.status} - ${errorText}`)
+  }
 
-    const data = await response.json()
-    const content = data.choices?.[0]?.message?.content || ''
+  const data = await response.json()
+  const content = data.choices?.[0]?.message?.content || ''
 
-    // 提取 JSON（可能被 markdown 代码块包裹）
-    let jsonStr = content
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/)
-    if (jsonMatch) {
-      jsonStr = jsonMatch[1].trim()
-    }
+  if (!content) {
+    throw new Error('GLM API 返回内容为空')
+  }
 
-    // 解析 AI 返回的 JSON
-    const parsed = JSON.parse(jsonStr)
+  // 提取 JSON（可能被 markdown 代码块包裹）
+  let jsonStr = content
+  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (jsonMatch) {
+    jsonStr = jsonMatch[1].trim()
+  }
 
-    return {
-      title: article.title,
-      description: article.excerpt,
-      genre,
-      characters: parsed.characters || [],
-      scenes: parsed.scenes || [],
-      decisionPoints: parsed.decisionPoints || [],
-    }
-  } catch (error) {
-    console.error('[StoryProcessor] AI processing failed, falling back to simplified:', error)
-    return structureStoryFromArticle(article, genre)
+  // 解析 AI 返回的 JSON
+  let parsed
+  try {
+    parsed = JSON.parse(jsonStr)
+  } catch (parseError) {
+    console.error('[StoryProcessor] Failed to parse AI response:', jsonStr)
+    throw new Error('AI 返回的 JSON 格式无效，请重试')
+  }
+
+  // 验证必要字段
+  if (!parsed.characters || parsed.characters.length === 0) {
+    throw new Error('AI 返回的剧本缺少角色信息')
+  }
+  if (!parsed.scenes || parsed.scenes.length === 0) {
+    throw new Error('AI 返回的剧本缺少场景信息')
+  }
+
+  return {
+    title: article.title,
+    description: article.excerpt,
+    genre,
+    characters: parsed.characters,
+    scenes: parsed.scenes,
+    decisionPoints: parsed.decisionPoints || [],
   }
 }

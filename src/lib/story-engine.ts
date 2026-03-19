@@ -80,9 +80,14 @@ export class StoryEngine {
     }
 
     // 解析故事内容
-    const content = JSON.parse(story.content)
-    this.scenes = content.scenes || []
-    this.characters = content.characters || []
+    try {
+      const content = JSON.parse(story.content)
+      this.scenes = content.scenes || []
+      this.characters = content.characters || []
+    } catch (error) {
+      console.error('[StoryEngine] Failed to parse story content:', error)
+      throw new Error('故事内容格式错误')
+    }
 
     // 加载或创建状态
     await this.loadState()

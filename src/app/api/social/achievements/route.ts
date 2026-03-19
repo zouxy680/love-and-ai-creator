@@ -24,8 +24,9 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[AchievementsAPI] Error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Failed to get achievements'
     return NextResponse.json(
-      { error: 'Failed to get achievements' },
+      { error: errorMessage },
       { status: 500 }
     )
   }
