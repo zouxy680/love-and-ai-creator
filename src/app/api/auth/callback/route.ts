@@ -9,53 +9,87 @@ export async function GET(request: NextRequest) {
     const error = searchParams.get('error')
 
     if (error) {
+      console.error('[OAuth] Error from SecondMe:', error)
       return NextResponse.redirect(
         new URL(`/login?error=${error}`, request.url)
       )
     }
 
     if (!code) {
+      console.error('[OAuth] No code in callback')
       return NextResponse.redirect(
         new URL('/login?error=no_code', request.url)
       )
     }
 
     // 交换 Token
-    const tokenData = await exchangeCodeForToken(code)
+    console.log('[OAuth] Exchanging code for token...')
+    let tokenData
+    try {
+      tokenData = await exchangeCodeForToken(code)
+      console.log('[OAuth] Token exchange successful')
+    } catch (tokenError) {
+      console.error('[OAuth] Token exchange failed:', tokenError)
+      return NextResponse.redirect(
+        new URL(`/login?error=token_failed&details=${encodeURIComponent(String(tokenError))}`, request.url)
+      )
+    }
+
     const { access_token, refresh_token, expires_in } = tokenData
 
     // 获取用户信息
-    const userInfo = await getUserInfo(access_token)
+    console.log('[OAuth] Getting user info...')
+    let userInfo
+    try {
+      userInfo = await getUserInfo(access_token)
+      console.log('[OAuth] User info retrieved:', userInfo.sub)
+    } catch (userError) {
+      console.error('[OAuth] Get user info failed:', userError)
+      return NextResponse.redirect(
+        new URL(`/login?error=userinfo_failed&details=${encodeURIComponent(String(userError))}`, request.url)
+      )
+    }
+
     const { sub: secondMeId, name, email, picture, bio, shades } = userInfo
 
     // 计算过期时间
     const tokenExpiresAt = new Date(Date.now() + (expires_in || 3600) * 1000)
 
     // 保存或更新用户到数据库
-    const user = await prisma.user.upsert({
-      where: { secondMeId },
-      create: {
-        secondMeId,
-        email: email || null,
-        name: name || null,
-        avatar: picture || null,
-        bio: bio || null,
-        shades: shades ? JSON.stringify(shades) : null,
-        accessToken: access_token,
-        refreshToken: refresh_token || null,
-        tokenExpiresAt,
-      },
-      update: {
-        email: email || null,
-        name: name || null,
-        avatar: picture || null,
-        bio: bio || null,
-        shades: shades ? JSON.stringify(shades) : null,
-        accessToken: access_token,
-        refreshToken: refresh_token || null,
-        tokenExpiresAt,
-      },
-    })
+    console.log('[OAuth] Saving user to database...')
+    let user
+    try {
+      user = await prisma.user.upsert({
+        where: { secondMeId },
+        create: {
+          secondMeId,
+          email: email || null,
+          name: name || null,
+          avatar: picture || null,
+          bio: bio || null,
+          shades: shades ? JSON.stringify(shades) : null,
+          accessToken: access_token,
+          refreshToken: refresh_token || null,
+          tokenExpiresAt,
+        },
+        update: {
+          email: email || null,
+          name: name || null,
+          avatar: picture || null,
+          bio: bio || null,
+          shades: shades ? JSON.stringify(shades) : null,
+          accessToken: access_token,
+          refreshToken: refresh_token || null,
+          tokenExpiresAt,
+        },
+      })
+      console.log('[OAuth] User saved:', user.id)
+    } catch (dbError) {
+      console.error('[OAuth] Database error:', dbError)
+      return NextResponse.redirect(
+        new URL(`/login?error=db_failed&details=${encodeURIComponent(String(dbError))}`, request.url)
+      )
+    }
 
     // 创建响应并设置 cookie
     const response = NextResponse.redirect(new URL('/dashboard', request.url))
@@ -69,11 +103,12 @@ export async function GET(request: NextRequest) {
       path: '/',
     })
 
+    console.log('[OAuth] Login successful, redirecting to dashboard')
     return response
   } catch (error) {
     console.error('OAuth callback error:', error)
     return NextResponse.redirect(
-      new URL('/login?error=auth_failed', request.url)
+      new URL(`/login?error=auth_failed&details=${encodeURIComponent(String(error))}`, request.url)
     )
   }
 }
