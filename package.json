@@ -12,7 +12,7 @@
     "postinstall": "prisma db push"
   },
   "dependencies": {
-    "@neondatabase/serverless": "^1.0.0",
+    "@neondatabase/serverless": "^0.10.0",
     "@prisma/adapter-neon": "^5.0.0",
     "@prisma/client": "^5.0.0",
     "lucide-react": "^0.400.0",
