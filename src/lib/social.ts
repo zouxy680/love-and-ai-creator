@@ -2,6 +2,19 @@
 
 import { prisma } from './prisma'
 
+// 兼容 Node.js 和浏览器环境的 base64 编码
+function toBase64Url(str: string): string {
+  if (typeof Buffer !== 'undefined') {
+    // Node.js 环境
+    return Buffer.from(str).toString('base64url')
+  } else if (typeof btoa !== 'undefined') {
+    // 浏览器环境
+    return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  }
+  // 降级方案
+  return str.split('').map(c => c.charCodeAt(0).toString(16)).join('').substring(0, 16)
+}
+
 /**
  * 分享记录
  */
@@ -155,7 +168,7 @@ export const ACHIEVEMENTS: Achievement[] = [
 export function generateShareCode(storyId: string, userId: string): string {
   const timestamp = Date.now().toString(36)
   const random = Math.random().toString(36).substring(2, 6)
-  const hash = Buffer.from(`${storyId}:${userId}:${timestamp}`).toString('base64url').substring(0, 8)
+  const hash = toBase64Url(`${storyId}:${userId}:${timestamp}`).substring(0, 8)
   return `${hash}${random}`
 }
 
@@ -261,8 +274,9 @@ async function grantInvitationReward(inviterId: string): Promise<void> {
     where: { inviterId, status: 'accepted' },
   })
 
-  // 解锁成就
+  // 解锁成就 - 使用正确的成就 ID
   if (inviteCount === 1) {
+    // 第一个邀请成功，解锁"分享达人"
     await unlockAchievement(inviterId, 'first_share')
   }
   if (inviteCount >= 10) {

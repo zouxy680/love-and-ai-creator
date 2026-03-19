@@ -61,20 +61,26 @@ ${sceneContext ? `\n【当前场景】\n${sceneContext.title}\n${sceneContext.co
     let aiResponse: string
 
     try {
-      // 获取用户的 SecondMe 分身信息
-      const userInfo = await getUserInfo(user.accessToken)
-      const agentId = userInfo.sub // 使用用户的 SecondMe ID 作为 agent ID
+      // 检查 Token 是否过期
+      if (user.tokenExpiresAt && new Date() > user.tokenExpiresAt) {
+        console.log('[Chat] Token expired, using fallback response')
+        aiResponse = generateRoleBasedResponse(message, story.genre, roleAssignment)
+      } else {
+        // 获取用户的 SecondMe 分身信息
+        const userInfo = await getUserInfo(user.accessToken)
+        const agentId = userInfo.sub // 使用用户的 SecondMe ID 作为 agent ID
 
-      const chatResponse = await sendChatMessage(
-        user.accessToken,
-        agentId,
-        `${systemPrompt}\n\n玩家说：${message}`,
-        { storyId, sceneContext, roleName: roleAssignment?.characterName }
-      )
+        const chatResponse = await sendChatMessage(
+          user.accessToken,
+          agentId,
+          `${systemPrompt}\n\n玩家说：${message}`,
+          { storyId, sceneContext, roleName: roleAssignment?.characterName }
+        )
 
-      aiResponse = chatResponse.response || chatResponse.message || '...'
+        aiResponse = chatResponse.response || '...'
+      }
     } catch (apiError) {
-      console.error('SecondMe API error:', apiError)
+      console.error('[Chat] SecondMe API error:', apiError)
       // 如果 API 调用失败，使用基于角色的模拟回复
       aiResponse = generateRoleBasedResponse(message, story.genre, roleAssignment)
     }

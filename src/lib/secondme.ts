@@ -148,18 +148,20 @@ export async function getUserInfo(accessToken: string) {
   }
 }
 
-// A2A Chat API
+// A2A Chat API (流式响应)
+// 注意：SecondMe Chat API 返回 SSE 流式响应，需要累积 delta content
 export async function sendChatMessage(
   accessToken: string,
   agentId: string,
   message: string,
   context?: Record<string, unknown>
-) {
+): Promise<{ response: string; sessionId?: string }> {
   const response = await fetch(SECONDME_CHAT_URL, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
+      'Accept': 'text/event-stream',
     },
     body: JSON.stringify({
       agent_id: agentId,
@@ -173,7 +175,68 @@ export async function sendChatMessage(
     throw new Error(`Failed to send chat message: ${error}`)
   }
 
-  return response.json()
+  // 处理 SSE 流式响应
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('No response body')
+  }
+
+  const decoder = new TextDecoder()
+  let accumulatedContent = ''
+  let sessionId = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const chunk = decoder.decode(value, { stream: true })
+      const lines = chunk.split('\n')
+
+      for (const line of lines) {
+        // 解析 SSE 格式
+        if (line.startsWith('event: session')) {
+          // 下一行包含 session ID
+        } else if (line.startsWith('data: ')) {
+          const data = line.slice(6)
+          if (data === '[DONE]') {
+            continue
+          }
+          try {
+            const parsed = JSON.parse(data)
+            // 提取 delta content
+            const delta = parsed.choices?.[0]?.delta?.content
+            if (delta) {
+              accumulatedContent += delta
+            }
+            // 提取 sessionId
+            if (parsed.sessionId) {
+              sessionId = parsed.sessionId
+            }
+          } catch {
+            // 如果不是 JSON，直接追加内容（兼容不同格式）
+            if (data && !data.includes('[DONE]')) {
+              accumulatedContent += data
+            }
+          }
+        } else if (line.startsWith('{')) {
+          // 直接的 JSON 响应（非 SSE 格式）
+          try {
+            const parsed = JSON.parse(line)
+            if (parsed.response) {
+              return { response: parsed.response, sessionId: parsed.sessionId }
+            }
+          } catch {
+            // ignore parse errors
+          }
+        }
+      }
+    }
+  } finally {
+    reader.release()
+  }
+
+  return { response: accumulatedContent, sessionId }
 }
 
 // Key Memory - 读取（获取用户软记忆）

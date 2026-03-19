@@ -8,7 +8,16 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'api.second.me',
+        hostname: 'api.mindverse.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.mindverse.com',
+      },
+      // 知乎图片
+      {
+        protocol: 'https',
+        hostname: '*.zhimg.com',
       },
     ],
   },
